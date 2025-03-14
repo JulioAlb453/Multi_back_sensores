@@ -1,0 +1,108 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop  
+  pull_request:
+    branches:
+      - main
+      - develop  # Se agregó develop para PRs también
+    types: [opened, closed, review_requested]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: 1.23.5 
+
+    - name: Build
+      run: go build -o mi-proyecto .
+
+    - name: Run tests
+      run: go test ./...
+
+    # Enviar evento a la API cuando se abre un Pull Request
+    - name: Send PR Opened Event to API
+      if: github.event_name == 'pull_request' && github.event.action == 'opened'
+      run: |
+        curl -X POST   https://222f-189-150-11-240.ngrok-free.app/webhook \
+          -H "Content-Type: application/json" \
+          -d '{
+            "repo": "${{ github.event.repository.full_name }}",
+            "type": "${{ github.event_name }}",
+            "action": "${{ github.event.action }}",
+            "pr_url": "${{ github.event.pull_request.html_url }}",
+            "commit_id": "${{ github.sha }}",
+            "user": "${{ github.event.sender.login }}",
+            "branch": "${{ github.head_ref || github.ref_name }}"
+          }'
+
+    # Enviar evento a la API cuando se solicita revisión en un PR
+    - name: Send PR Review Requested Event to API
+      if: github.event_name == 'pull_request' && github.event.action == 'review_requested'
+      run: |
+        curl -X POST   https://222f-189-150-11-240.ngrok-free.appp/webhook \
+          -H "Content-Type: application/json" \
+          -d '{
+            "repo": "${{ github.event.repository.full_name }}",
+            "type": "${{ github.event_name }}",
+            "action": "${{ github.event.action }}",
+            "pr_url": "${{ github.event.pull_request.html_url }}",
+            "commit_id": "${{ github.sha }}",
+            "user": "${{ github.event.sender.login }}",
+            "branch": "${{ github.head_ref || github.ref_name }}"
+          }'
+
+    # Enviar evento a la API cuando se mergea un PR
+    - name: Send PR Merged Event to API
+      if: github.event.pull_request.merged == true
+      run: |
+        curl -X POST   https://222f-189-150-11-240.ngrok-free.app/webhook \
+          -H "Content-Type: application/json" \
+          -d '{
+            "repo": "${{ github.event.repository.full_name }}",
+            "type": "${{ github.event_name }}",
+            "action": "merged",
+            "pr_url": "${{ github.event.pull_request.html_url }}",
+            "commit_id": "${{ github.sha }}",
+            "user": "${{ github.event.sender.login }}",
+            "branch": "${{ github.head_ref || github.ref_name }}"
+          }'
+
+    # Enviar evento a la API cuando hay un nuevo Push
+    - name: Send Push Event to API
+      if: github.event_name == 'push'
+      run: |
+        curl -X POST    https://222f-189-150-11-240.ngrok-free.app  \
+          -H "Content-Type: application/json" \
+          -d '{
+            "repo": "${{ github.event.repository.full_name }}",
+            "type": "${{ github.event_name }}",
+            "action": "push",
+            "commit_id": "${{ github.sha }}",
+            "user": "${{ github.event.sender.login }}",
+            "branch": "${{ github.ref_name }}"
+          }'
+    # Enviar evento a la API cuando las pruebas pasan con éxito
+    - name: Send Tests Passed Event to API
+      if: success()
+      run: |
+        curl -X POST   https://222f-189-150-11-240.ngrok-free.app/webhook \
+          -H "Content-Type: application/json" \
+          -d '{
+            "repo": "${{ github.event.repository.full_name }}",
+            "type": "tests",
+            "action": "passed",
+            "commit_id": "${{ github.sha }}",
+            "user": "${{ github.event.sender.login }}",
+            "branch": "${{ github.ref_name }}"
+          }'
